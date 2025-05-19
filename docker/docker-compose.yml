@@ -1,5 +1,9 @@
-services:
+networks:
+  master_default:
+    name: master_default
+    external: true
 
+services:
   spreedbackend:
     build:
       context: ..
@@ -8,50 +12,64 @@ services:
         - "linux/amd64"
     volumes:
       - ./server.conf:/config/server.conf:ro
-    network_mode: host
+    networks:
+      - master_default
     restart: unless-stopped
     depends_on:
       - nats
       - janus
       - coturn
+    extra_hosts:
+      - host.docker.internal:host-gateway
 
   nats:
     image: nats:2.10
     volumes:
       - type: bind
-        source: ./gnatsd.conf
+        source: ../gnatsd.conf
         target: /config/gnatsd.conf
         read_only: true
     command: ["-c", "/config/gnatsd.conf"]
-    network_mode: host
     restart: unless-stopped
+    networks:
+      - master_default
 
   janus:
     build: janus
-    command: ["janus", "--full-trickle"]
-    network_mode: host
+    command: ["janus", "--full-trickle", "-d", "5"]
     restart: unless-stopped
+    networks:
+      - master_default
 
   coturn:
     image: coturn/coturn:4.6
-    network_mode: host
-    #
+    #network_mode: host
+    networks:
+      - master_default
+    ports:
+      - 3478:3478
+      - 3478:3478/udp
+      - 5349:5349
+      - 5349:5349/udp
+      - 49160-49180:49160-49180/udp
+
     # Update command parameters as necessary.
     #
     # See https://github.com/coturn/coturn/blob/master/README.turnserver for
     # available options.
     command:
       - "--realm"
-      - "nextcloud.domain.invalid"
+      - "nextcloud.local"
       - "--static-auth-secret"
-      - "static_secret_same_in_server_conf"
+      - "0647b96bbfbef17e0b3302ee297e2fbb4741675073a5cf26f54d3ab0cefb7fa5"
       - "--no-stdout-log"
       - "--log-file"
       - "stdout"
       - "--stale-nonce=600"
       - "--use-auth-secret"
-      - "--lt-cred-mech"
       - "--fingerprint"
       - "--no-software-attribute"
       - "--no-multicast-peers"
+      - "--min-port=49160"
+      - "--max-port=49180"
     restart: unless-stopped
